@@ -1,0 +1,150 @@
+function model = fill_hessian(model, allWfs, TD_parameters)
+%This fills out the Hessian. The Hessian is computationally intensive, so
+%it's hard to get for routine use. It's so big that it's hard to store, and
+%so it gets cleaned as a sparse matrix
+
+    H      = zeros(model.nparam, model.nparam);
+    thresh = 1e-4;
+
+    if TD_parameters.parallel
+
+        parfor k = 1:numel()
+    
+        
+
+            if kk > k
+
+                continue%its symmetric
+
+            end
+
+            H(k, kk) = internal_loop(model, allWfs, TD_parameters, k, kk);
+
+        end
+
+    else
+
+        for k = 1:model.nparam
+    
+            for kk = 1:model.nparam
+
+                if kk > k
+
+                    continue%its symmetric
+
+                end
+
+                H(k, kk) = internal_loop(model, allWfs, TD_parameters, k, kk);
+
+            end
+
+        end
+
+    end
+
+    H = (H + H');%fill it the outside of the matrix
+    H(1:model.nparam, 1:model.nparam) = H(1:model.nparam, 1:model.nparam)/2;%since you just doubled it
+
+    model.H = sparse(H);
+
+end
+
+function del = internal_loop(model, allWfs, TD_parameters, index, index2)
+
+    [index,  field,  scale,  evtind,  staind]  = map_index(index, model, allWfs, TD_parameters);
+    [index2, field2, scale2, evtind2, staind2] = map_index(index2, model, allWfs, TD_parameters);
+
+    %cases that are obvious to skip
+    if strcmp(field, 'wavelet') && strcmp(field2, 'wavelet') && evtind ~= evtind2
+
+        del = 0;
+        return
+
+    end
+
+    if (strcmp(field, 'A') || strcmp(field, 'B') || strcmp(field, 'fast_dir_rotation')) && length(staind2) == 1 && (staind ~= staind2)
+
+        del = 0;
+        return
+
+    end
+
+    if (strcmp(field2, 'A') || strcmp(field2, 'B') || strcmp(field2, 'fast_dir_rotation')) && length(staind) == 1 && (staind ~= staind2)
+
+        del = 0;
+        return
+
+    end
+
+    if length(staind) == 1 && length(staind2) == 1 && staind ~= staind2
+
+        del = 0;
+        return
+        
+    end
+
+    if length(evtind) == 1 && length(evtind2) == 1 && evtind ~= evtind2
+
+        del = 0;
+        return
+        
+    end
+
+    staind = unique([staind staind2]);
+    evtind = unique([evtind evtind2]);
+
+    if strcmp(field, field2) && index == index2
+
+        modelp = model;
+        modeln = model;
+        
+        h = TD_parameters.h*scale;
+    
+        modelp.(field)(index) = modelp.(field)(index) + h;
+        modeln.(field)(index) = modeln.(field)(index) - h;
+        modelp                = apply_update(modelp, field, TD_parameters.t);
+        modeln                = apply_update(modeln, field, TD_parameters.t);
+    
+        modelp = evaluate(modelp, allWfs, TD_parameters, evtind, staind, []);
+        modeln = evaluate(modeln, allWfs, TD_parameters, evtind, staind, []);
+        
+        del = ((modelp.lpst + modeln.lpst - 2*model.lpst)/(h^2))*scale^2;
+
+    else
+
+        h  = TD_parameters.h*scale;
+        h2 = TD_parameters.h*scale2;
+
+        modelpp   = model;
+        modelpp.(field)(index)   = model.(field)(index)   + h;
+        modelpp.(field2)(index2) = model.(field2)(index2) + h2;
+        modelpp   = apply_update(modelpp, field, TD_parameters.t);
+        modelpp   = apply_update(modelpp, field2, TD_parameters.t);
+        modelpp   = evaluate(modelpp, allWfs, TD_parameters, evtind, staind, []);
+    
+        modelpn   = model;
+        modelpn.(field)(index)   = model.(field)(index)   + h;
+        modelpn.(field2)(index2) = model.(field2)(index2) - h2;
+        modelpn   = apply_update(modelpn, field, TD_parameters.t);
+        modelpn   = apply_update(modelpn, field2, TD_parameters.t);
+        modelpn   = evaluate(modelpn, allWfs, TD_parameters, evtind, staind, []);
+    
+        modelnp   = model;
+        modelnp.(field)(index)   = model.(field)(index)   - h;
+        modelnp.(field2)(index2) = model.(field2)(index2) + h2;
+        modelnp   = apply_update(modelnp, field, TD_parameters.t);
+        modelnp   = apply_update(modelnp, field2, TD_parameters.t);
+        modelnp   = evaluate(modelnp, allWfs, TD_parameters, evtind, staind, []);
+    
+        modelnn   = model;
+        modelnn.(field)(index)   = model.(field)(index)   - h;
+        modelnn.(field2)(index2) = model.(field2)(index2) - h2;
+        modelnn   = apply_update(modelnn, field, TD_parameters.t);
+        modelnn   = apply_update(modelnn, field2, TD_parameters.t);
+        modelnn   = evaluate(modelnn, allWfs, TD_parameters, evtind, staind, []);
+
+        del = scale*scale2*(modelpp.lpst + modelnn.lpst - modelpn.lpst - modelnp.lpst)/(4*h*h2);
+
+    end
+
+end

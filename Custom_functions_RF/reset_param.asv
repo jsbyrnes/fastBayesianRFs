@@ -1,0 +1,148 @@
+function [ model ] = reset_param(model, allWfs, TD_parameters, index)
+
+    [nevt, nsta] = size(allWfs);
+    n = length(TD_parameters.t);
+    [~, nl] = size(model.dt);
+
+    modeln               = model;
+    modeln.vector(index) = modeln.vector(index) + 0.5;
+    modeln               = devectorize_model(modeln, nevt, nsta, n, nl, TD_parameters);
+
+    evtind = [];
+    staind = [];
+    type   = [];
+
+    if index > (length(model.vector) - 2)
+
+        type = 'error';
+    
+        evtind = 1:nevt;
+        staind = 1:nsta;
+
+        %fordebugging = 'covarience';
+
+    elseif any(modeln.sig(:) - model.sig(:))
+
+        type = 'error';
+
+        k                = find(modeln.sig(:) - model.sig(:));
+        [evtind, staind] = ind2sub(size(allWfs), k);
+
+        %fordebugging = 'sig';
+
+    elseif any(modeln.sta_or - model.sta_or)
+
+        type = 'error';
+
+        staind = find(modeln.sta_or - model.sta_or);
+        evtind = 1:nevt;
+
+        %fordebugging = 'or';
+
+    elseif any(abs(modeln.polarization - model.polarization)>1e-10)
+
+        type = 'all';
+
+        [~, evtind] = max(abs(modeln.polarization - model.polarization));%rounding errors occur
+        staind = 1:nsta;
+
+        %fordebugging = 'polarization';
+
+    elseif (any(modeln.A(:) - model.A(:))...
+            || any(modeln.B(:) - model.B(:))...
+            || any(modeln.fast_dir_rotation(:) - model.fast_dir_rotation(:))) ...
+            && model.vector_style == 0 %AB style
+    
+        type = 'all';
+
+        staind = [ find((sum(modeln.A,2) - sum(model.A,2) )), ...
+            find((sum(modeln.B,2) - sum(model.B,2) )), ...
+            find((sum(modeln.fast_dir_rotation,2) - sum(model.fast_dir_rotation,2) ))];
+
+        evtind = 1:nevt;
+
+        %fordebugging = 'AB';
+
+    elseif (any( abs(modeln.dt(:) - model.dt(:))>1e-10)...
+            || any( abs(modeln.fast_dir(:) - model.fast_dir(:))> 1e-10)...
+            || any(modeln.fast_dir_rotation(:) - model.fast_dir_rotation(:))) ...
+            && model.vector_style == 1 %spherical style. Note rounding error correction. For both log and atan
+    
+        type = 'all';
+
+        staind = [ find(abs(sum(modeln.dt,2) - sum(model.dt,2) )>1e-10), ...
+            find(abs(sum(modeln.fast_dir,2) - sum(model.fast_dir,2) ) > 1e-10), ...
+            find((sum(modeln.fast_dir_rotation,2) - sum(model.fast_dir_rotation,2) ))];
+        evtind = 1:nevt;
+
+        %fordebugging = 'spherical';
+
+    elseif any(modeln.wavelet(:) - model.wavelet(:))
+        
+        type = 'source_fit';
+
+        evtind = find(sum(modeln.wavelet - model.wavelet, 2));
+        staind = 1:nsta;
+    
+        %fordebugging = 'wavelet';
+
+    elseif any(modeln.amp(:) - model.amp(:)) || ...
+        any(modeln.shift(:) - model.shift(:)) || ...
+        any(modeln.dtS(:) - model.dtS(:))
+
+        type = 'source_fit';
+
+        k = [ find(modeln.amp(:) - model.amp(:)), ...
+           find(modeln.shift(:) - model.shift(:)), find(modeln.dtS(:) - model.dtS(:)) ];
+        [evtind, staind] = ind2sub(size(allWfs), k);
+
+        %fordebugging = 'sourcefitting';
+
+    end
+
+    %number of samples scale to however many times you update these
+
+    starting_mpst = model.llh + model.lp;
+
+    %mix of a local and heavy tailed search
+    pert = [ exprnd(1, round(TD_parameters.line_iterations/2), 1)...
+        .*(-1).^randi([0, 1], round(TD_parameters.line_iterations/2), 1);
+    exprnd(TD_parameters.step_std, round(TD_parameters.line_iterations/2), 1)...
+    .*(-1).^randi([0, 1], round(TD_parameters.line_iterations/2), 1) ];
+
+    for kk = 1:length(pert)
+
+        modeln = model;
+
+        modeln.vector(index) = modeln.vector(index) + pert(kk);
+        modeln               = devectorize_model(modeln, nevt, nsta, n, nl, TD_parameters);
+        modeln               = evaluate(modeln, allWfs, TD_parameters, evtind, staind, type);
+
+        lpst(kk) = modeln.llh + modeln.lp;
+
+    end
+
+    if TD_parameters.mh
+
+        %calculate relative probablities and make a random selection
+        lpst = exp([ starting_mpst lpst ]);
+        lps
+        
+
+    else
+
+        [mpst, i] = max(lpst);
+
+        if mpst > starting_mpst
+    
+            model.vector(index) = pert(i) + model.vector(index);
+            model               = devectorize_model(model, nevt, nsta, n, nl, TD_parameters);
+            model               = evaluate(model, allWfs, TD_parameters, evtind, staind, type);%burn a run
+    
+        end
+
+    end
+
+    model = vectorize_model(model, TD_parameters);
+    
+end

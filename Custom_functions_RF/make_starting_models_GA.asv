@@ -1,0 +1,154 @@
+function model = make_starting_models_GA(TD_parameters, allWfs)
+
+    t = TD_parameters.t;
+
+    [nevt, nsta] = size(allWfs);
+
+    %per evt parameters
+    for k = 1:nevt
+
+        if TD_parameters.wavelet
+
+           wavelet = zeros(length(TD_parameters.t),1);
+    
+            %stack the stack to the nth root
+            for j = 1:nsta
+    
+                %rotate to radial
+                radial = allWfs(k,j).north*cos(TD_parameters.polarization(k)) + ...
+                    allWfs(k,j).east*sin(TD_parameters.polarization(k));
+    
+                if ~any(isnan(radial))
+    
+                    wavelet = wavelet + sign(radial).*abs(radial).^(1/TD_parameters.nth_root);
+    
+                end
+    
+            end
+    
+            model.wavelet(k, :) = sign(wavelet).*abs(wavelet).^(TD_parameters.nth_root);
+            model.wavelet(k, :) = model.wavelet(k, :)/rms(model.wavelet(k, :)) + 0.5*randn(size(model.wavelet(k, :)));
+            %model.wavelet(k, :) = randn(length(TD_parameters.t),1);%model.wavelet(k, :)/rms(model.wavelet(k, :));% + randn();
+
+        else
+
+            model.wavelet = TD_parameters.syn_wavelet;
+
+        end
+            
+        model.polarization(k,1) = TD_parameters.polarization(k) + TD_parameters.polarization_std*randn();
+        %model.polarization(k,1) = mod(model.polarization(k), 2*pi);
+
+    end
+
+   for k = 1:nsta
+
+        x = [allWfs(:, k).orientation_k];
+
+        if isempty(x(~isnan(x)))
+            sta_err(k,1) = 2*pi;
+        else
+            sta_err(k,1) = unique(x(~isnan(x)));
+            sta_err(k,1) = sqrt(1/sta_err(k,1));
+        end
+
+    end
+
+    if TD_parameters.prior_information.use
+
+        %per station parameters
+        if TD_parameters.cluster
+    
+            model.dt(1, 1) = TD_parameters.prior_information.dt(1) + TD_parameters.prior_information.dt_std(1)*randn();
+            model.dt(1, 2) = TD_parameters.prior_information.dt(2) + TD_parameters.prior_information.dt_std(2)*randn();
+            model.fast_dir(1,1) = TD_parameters.prior_information.phi(1) + TD_parameters.prior_information.phi_std(1)*randn();%in radians
+            model.fast_dir(1,2) = TD_parameters.prior_information.phi(2) + TD_parameters.prior_information.phi_std(2)*randn();%in radians
+            model   = make_AB(model);
+            model   = make_dtphi(model);%enforce a pi/2 wrap
+            model.fast_dir_rotation(1,1) = TD_parameters.prior_information.rot(1) + TD_parameters.prior_information.rot_std(2)*randn();%in radians
+            model.fast_dir_rotation(1,2) = TD_parameters.prior_information.rot(2) + TD_parameters.prior_information.rot_std(2)*randn();%in radians
+
+%              model.dt(1, 1) = TD_parameters.prior_information.dt(1);
+%              model.dt(1, 2) = TD_parameters.prior_information.dt(2);
+%              model.fast_dir(1,1) = TD_parameters.prior_information.phi(1);%in radians
+%              model.fast_dir(1,2) = TD_parameters.prior_information.phi(2);%in radians
+%              model   = make_AB(model);
+%              model   = make_dtphi(model);%enforce a pi/2 wrap
+%              model.fast_dir_rotation(1,1) = TD_parameters.prior_information.rot(1);%in radians
+%              model.fast_dir_rotation(1,2) = TD_parameters.prior_information.rot(2);%in radians
+
+        else
+    
+            model.dt(:, 1) = randn(nsta,1)*TD_parameters.prior_information.dt_std(1) + TD_parameters.prior_information.dt(1);
+            model.dt(:, 2) = randn(nsta,1)*TD_parameters.prior_information.dt_std(2) + TD_parameters.prior_information.dt(2);
+            model.fast_dir(:,1) = randn(nsta,1)*TD_parameters.prior_information.phi_std(1) + TD_parameters.prior_information.phi(1);%in radians
+            model.fast_dir(:,1) = randn(nsta,1)*TD_parameters.prior_information.phi_std(2) + TD_parameters.prior_information.phi(2);%in radians
+            model   = make_AB(model);
+            model   = make_dtphi(model);%enforce a pi/2 wrap
+            model.fast_dir_rotation(:,1) = randn(nsta,1)*TD_parameters.prior_information.rot_std(1) + TD_parameters.prior_information.rot(1);%in radians
+            model.fast_dir_rotation(:,2) = randn(nsta,1)*TD_parameters.prior_information.rot_std(2) + TD_parameters.prior_information.rot(2);%in radians
+    
+        end
+
+    else
+
+        %per station parameters
+        if TD_parameters.cluster
+    
+            model.A = randn(1,TD_parameters.max_layers)*TD_parameters.ABstd;
+            model.B = randn(1,TD_parameters.max_layers)*TD_parameters.ABstd;
+            model   = make_dtphi(model);
+            model.fast_dir_rotation = randn(1,TD_parameters.max_layers)*TD_parameters.rotation_std;%in radians
+        
+        else
+    
+            model.A = randn(nsta,TD_parameters.max_layers)*TD_parameters.ABstd;
+            model.B = randn(nsta,TD_parameters.max_layers)*TD_parameters.ABstd;
+            model   = make_dtphi(model);
+            model.fast_dir_rotation = randn(nsta,TD_parameters.max_layers)*TD_parameters.rotation_std;%in radians
+    
+        end
+
+    end
+
+    model.sta_or            = zeros(nsta,1)*TD_parameters.orientation_std;%approximation to von mises
+
+    %per station-evt pairs
+    model.sig      = zeros(nevt, nsta);
+    model.amp      = zeros(nevt, nsta);%log
+    model.shift    = zeros(nevt, nsta);
+    model.dtS      = TD_parameters.dtS(1)*ones(nevt, nsta);%*TD_parameters.max_dtS;%ones(20, 1);% abs(randn(n,1)*TD_parameters.dt_std);
+
+    %global parameters
+    %model.r = TD_parameters.r_range(1);% + randn()*TD_parameters.r_range(2);%rand(n,1)*TD_parameters.max_dt;%log(0.9);%
+    %model.f = TD_parameters.f_range(1);% + randn()*TD_parameters.f_range(2);%rand(n,1)*TD_parameters.max_dt;%log(0.5);
+
+    model.N = cellfun(@ (x) zeros(length(TD_parameters.t),1), cell(5, 22), 'UniformOutput', false);
+
+    model = estimate_covarience(TD_parameters, allWfs, model);
+
+    %model.nparam = numel(model.wavelet) + nevt;% + nevt*nsta + 2;%orientations removed numel(model.A)*3
+    %model.nparam = numel(model.wavelet) + nevt + nevt*nsta + 2;
+
+    model = build_C(model, t);
+
+    model = evaluate(model, allWfs, TD_parameters, 1:nevt, 1:nsta, []);
+
+    %vectorize the model
+    model            = vectorize_model(model, TD_parameters);
+
+    model.id = randi([ 1 1e4 ]);
+
+end
+
+% n = floor(length(TD_parameters.t)/3);
+% 
+% for k = 1:(nevt*nsta)
+% 
+%     %model.amp(k) = log(max([ allWfs(k).north; allWfs(k).east ]));%peak is real peak, scaled down to damp gradient
+%     %model.sig(k) = log(std([ allWfs(k).north(1:n); allWfs(k).east(1:n) ])/4);%~quarter variation is noise
+% 
+% end
+% 
+% model.amp = reshape(model.amp, size(allWfs));
+% %model.sig = reshape(model.sig, size(allWfs));

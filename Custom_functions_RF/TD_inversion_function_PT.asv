@@ -1,0 +1,706 @@
+function model = TD_inversion_function_PT(model, TD_parameters, allWfs)
+
+    t = TD_parameters.t;
+
+    %the concatonation at the end here is used for attenuation and takes up
+    %~third of the entire program is not moved up this far
+    fs = 1/(t(2) - t(1));
+
+    dFreq = fs/length(t); %frequency spacing
+    fNyq=fs/2;   %Nyquist frequency
+    
+    %the next two steps build the frequency vector (freqs at which spectrum
+    %was calculated) postivie and negative
+    f=(0:length(t)-1)'*dFreq;
+    f(f>fNyq)=f(f>fNyq)-fNyq*2;
+
+    f = -2*pi*f; %needs to be negative, but why?
+    prelogf = log([1; f(2:end)]/(400*2*pi));
+
+    %note that T has been inverted
+
+    [nevt, nsta] = size(allWfs);
+
+    %four types of action, do all of them in a row. 
+
+    %actions that are per event
+    for k = 1:nevt %should be completely independent
+        
+        %action = [randi([1 2]) randi([1 2]) 3*ones(1,floor(model.nCells(k)/4)) 4];%randperm(4);%src b, src d, src t, src a, polarization
+        action = [ones(1,floor(length(t)/4)) 2];%randperm(4);%src b, src d, src t, src a, polarization
+        action = action(randperm(length(action)));%scramble
+
+        for a = 1:length(action)
+
+            modeln = model;
+
+            AmpCells = modeln.AmpCells{k};
+
+            switch action(a)
+    
+%                 case 1 %birth
+%     
+%                     if model.nCells(k) < (length(t)-1)
+%     
+% %                         tCells   = modeln.tCells{k};
+% %                         AmpCells = modeln.AmpCells{k};
+% %     
+% %                         modeln.nCells(k)         = modeln.nCells(k) + 1;
+% %                         tCells(modeln.nCells(k)) = rand()*(max(t) - TD_parameters.maxDelay*2) + TD_parameters.maxDelay;
+% %     
+% %                         old                        = interp1(tCells(1:end-1), AmpCells, tCells(end), 'pchip');    
+% %                         AmpCells(modeln.nCells(k)) = randn()*TD_parameters.sig + old;
+% %     
+% %                         new = AmpCells(modeln.nCells(k));
+% %     
+% %                         [tCells, ind] = sort(tCells);
+% %                         AmpCells      = AmpCells(ind);
+% %     
+% %                         modeln.wavelet{k} = interp1(tCells, AmpCells, t, 'pchip');
+% %     
+% %                         modeln.tCells{k}   = tCells;
+% %                         modeln.AmpCells{k} = AmpCells;
+% %     
+% %                         modeln = evaluate(modeln, allWfs, TD_parameters, t, k, 1:nsta, prelogf);
+% %                         alpha  = min([1 exp((-(new)^2)/2)*...
+% %                             exp(((new - old)^2)/(2*TD_parameters.sig^2))*exp(-(modeln.phi - model.phi)/2)^model.T ]);
+%        
+%                         modeln.nCells(k)         = modeln.nCells(k) + 1;
+%     
+%                         %newind spots
+%                         nind = find(AmpCells(2:end)==0);
+%                         nind = nind(randi(length(nind))) + 1;
+% 
+%                         AmpCells(nind) = randn()*TD_parameters.sig;
+%         
+%                         modeln.wavelet{k} = idct(AmpCells);%interp1(tCells, AmpCells, t, 'pchip');
+%                         modeln.AmpCells{k} = AmpCells;
+%     
+%                         modeln = evaluate(modeln, allWfs, TD_parameters, t, k, 1:nsta, prelogf);
+%                         alpha  = min([1 exp((-(AmpCells(nind))^2)/2)*...
+%                             exp(((AmpCells(nind))^2)/(2*TD_parameters.sig^2))*exp(-(modeln.phi - model.phi)/2)^model.T ]);
+% 
+%                         if rand() < alpha
+%     
+%                             model        = modeln;
+%     
+%                         end
+%     
+%                     end
+%     
+%                 case 2 %death
+%     
+%                     if model.nCells(k) > 2
+%     
+% %                         tCells   = modeln.tCells{k};
+% %                         AmpCells = modeln.AmpCells{k};
+% %     
+% %                         kill = randi([ 3 (model.nCells(k)-2) ], 1);%endpoints fixed
+% %                         oldt = tCells(kill);
+% %                         olda = AmpCells(kill);
+% %     
+% %                         tCells(kill)      = [];
+% %                         AmpCells(kill)    = [];
+% %                         modeln.nCells(k)  = modeln.nCells(k) - 1;
+% %     
+% %                         new = interp1(tCells, AmpCells, oldt, 'pchip');
+% %                         modeln.wavelet{k} = interp1(tCells, AmpCells, t, 'pchip');
+% %     
+% %                         modeln.tCells{k}   = tCells;
+% %                         modeln.AmpCells{k} = AmpCells;
+% %     
+% %                         modeln = evaluate(modeln, allWfs, TD_parameters, t, k, 1:nsta, prelogf);
+% %                         alpha  = min([1 exp((olda^2)/2)*...
+% %                             exp((-(new - olda)^2)/(2*TD_parameters.sig^2))*exp(-(modeln.phi - model.phi)/2)^model.T ]);
+%     
+%                         %newind spots
+% 
+%                         modeln.nCells(k) = modeln.nCells(k) - 1;
+% 
+%                         olda = AmpCells;
+%                         kind = find(AmpCells~=0);
+%                         kind = kind(randi(length(kind)));
+% 
+%                         AmpCells(kind) = 0;
+%         
+%                         modeln.wavelet{k} = idct(AmpCells);%interp1(tCells, AmpCells, t, 'pchip');
+%                         modeln.AmpCells{k} = AmpCells;
+%     
+%                         modeln = evaluate(modeln, allWfs, TD_parameters, t, k, 1:nsta, prelogf);
+%                         alpha  = min([1 exp((olda(kind)^2)/2)*...
+%                             exp((-(olda(kind))^2)/(2*TD_parameters.sig^2))*exp(-(modeln.phi - model.phi)/2)^model.T ]);
+% 
+%                         if rand() < alpha
+%     
+%                             model        = modeln;
+%     
+%                         end
+%     
+%                     end
+    
+                case 1 %change a node in the source wavelet
+    
+                    olda = AmpCells;
+                    cind = find(AmpCells(2:end)~=0);
+
+                    cind = cind(randi(length(cind))) + 1;
+
+                    AmpCells(cind) = AmpCells(cind) + randn()*TD_parameters.sig;
+
+                    modeln.wavelet{k} = fft(idct(AmpCells));%only ever used in F domain %interp1(tCells, AmpCells, t, 'pchip');
+                    modeln.AmpCells{k} = AmpCells;
+
+                    modeln = evaluate(modeln, allWfs, TD_parameters, t, k, 1:nsta, prelogf);
+    
+                    alpha  = min([1 exp( (olda(cind)^2)/2 - ((AmpCells(cind))^2)/2)*...
+                        exp(-(modeln.phi - model.phi)/2)^model.T ]);
+    
+                    if rand() < alpha
+    
+                        model        = modeln;
+    
+                    else
+            
+                        m1 = modeln;
+                        a1 = alpha;
+                        amp1 = AmpCells;
+
+                        sig  = TD_parameters.sig;
+                        sig2 = TD_parameters.sig/5;
+    
+                        m2             = m1;
+                        AmpCells(cind) = randn()*sig2 + olda(cind);
+
+                        m2.wavelet{k}  = fft(idct(AmpCells));%interp1(tCells, AmpCells, t, 'pchip');
+                        m2.AmpCells{k} = AmpCells;
+                        m2             = evaluate(m2, allWfs, TD_parameters, t, k, 1:nsta, prelogf);
+    
+                        amid  = min([1 exp(-(m1.phi - m2.phi)/2)^model.T ]);
+                        q     = exp( -( (AmpCells(cind)  - amp1(cind))^2 - (amp1(cind) - olda(cind))^2)/(2*sig^2) );
+                        alpha = min([ 1 exp( (olda(cind)^2)/2 - ((AmpCells(cind))^2)/2)*...
+                            (exp(-(m2.phi - model.phi)/2)^model.T)*q*(1 - amid)/(1 - a1)]);
+    
+                        if rand() < alpha
+    
+                            model        = m2;
+    
+%                         else
+%     
+%                             disp('source rejection')
+% 
+                        end
+
+
+                    end
+        
+                case 2 %change polarization
+    
+                    modeln.polarization(k) = randn()*TD_parameters.sig*TD_parameters.polarization_std + model.polarization(k);
+                    modeln.polarization(k) = mod(modeln.polarization(k), 2*pi);
+                    modeln                 = evaluate(modeln, allWfs, TD_parameters, t, k, 1:nsta, prelogf);
+        
+                    kappa = 1/TD_parameters.polarization_std^2;
+
+                    alpha = min([ 1 (exp(-(modeln.phi - model.phi)/2)^model.T)...
+                        *exp(kappa*(cos(modeln.polarization(k) - TD_parameters.polarization(k)) ...
+                        - cos(model.polarization(k) - TD_parameters.polarization(k)))) ]);
+
+                    %alpha  = min( [ log(1) (prpolarization + (modeln.llh - model.llh)*model.T)]);
+    
+                    if rand() < alpha
+    
+                        model        = modeln;
+    
+%                     else
+% 
+%                         disp('polarization rejection')
+                        
+                    end
+    
+            end
+
+        end
+
+    end
+
+    %per event-station pairs
+    change = randperm(nsta*nevt);%uses linear indexing. Randomize in case there are dependencies
+
+    for k = 1:length(change)
+
+        action = randperm(5);
+
+        for a = 1:length(action)
+
+            modeln = model;
+    
+            [evt_ind, sta_ind] = ind2sub(size(allWfs), change(k));
+    
+            switch action(a)
+    
+                case 1 %perturb shift
+    
+                    modeln.shift(change(k)) = randn()*TD_parameters.sig*TD_parameters.maxDelay*2 + model.shift(change(k));
+    
+                    modeln = evaluate(modeln, allWfs, TD_parameters, t, evt_ind, sta_ind, prelogf);
+                    alpha  = min([1 exp(-(modeln.phi - model.phi)/2)^model.T ]);
+    
+                    r = rand();
+    
+                    if r < alpha && abs(modeln.shift(change(k))) < TD_parameters.maxDelay
+    
+                        model        = modeln;
+    
+                   elseif r >= alpha && abs(modeln.shift(change(k))) < TD_parameters.maxDelay
+    
+                        m1 = modeln;
+                        a1 = alpha;
+    
+                        sig  = TD_parameters.sig*TD_parameters.maxDelay*2;
+                        sig2 = TD_parameters.sig*TD_parameters.maxDelay*2/20;
+    
+                        m2 = m1;
+                        m2.shift(change(k)) = randn()*sig2 + model.shift(change(k));
+                        m2 = evaluate(m2, allWfs, TD_parameters, t, evt_ind, sta_ind, prelogf);
+    
+                        amid = min([1 exp(-(m1.phi - m2.phi)/2)^model.T ]);
+    
+                        q = exp( -((m2.shift(change(k)) - m1.shift(change(k)))^2 - (m1.shift(change(k)) - model.shift(change(k)))^2)/(2*sig^2) );
+    
+                        alpha = min([ 1 (exp(-(m2.phi - model.phi)/2)^model.T)*q*(1 - amid)/(1 - a1)]);
+    
+                        if rand() < alpha && abs(m2.shift(change(k))) < TD_parameters.maxDelay
+    
+                            model = m2;
+    
+%                         else
+%     
+%                             disp('shift rejection')
+
+                        end
+    
+                     end
+    
+                case 2 %perturb amp
+    
+                    modeln.amp(change(k)) = randn()*TD_parameters.sig + model.amp(change(k));
+    
+                    modeln = evaluate(modeln, allWfs, TD_parameters, t, evt_ind, sta_ind, prelogf);
+                    alpha  = min([1 exp( ((model.amp(change(k)))^2)/2 - ((modeln.amp(change(k)))^2)/2)*...
+                        exp(-(modeln.phi - model.phi)/2)^model.T ]);
+    
+                    if rand() < alpha
+    
+                        model        = modeln;
+    
+                    else
+    
+                        m1 = modeln;
+                        a1 = alpha;
+    
+                        sig2 = TD_parameters.sig/10;
+    
+                        m2 = m1;
+                        m2.amp(change(k)) = randn()*sig2 + model.amp(change(k));
+                        m2 = evaluate(m2, allWfs, TD_parameters, t, evt_ind, sta_ind, prelogf);
+    
+                        amid = min([1 exp(-(m1.phi - m2.phi)/2)^model.T ]);
+    
+                        q = exp( -((m2.amp(change(k)) - m1.amp(change(k)))^2 - (m1.amp(change(k)) - model.amp(change(k)))^2)/(2*TD_parameters.sig^2) );
+    
+                        alpha = min([ 1 exp(((model.amp(change(k)))^2)/2 - ((m2.amp(change(k)))^2)/2)*...
+                            (exp(-(m2.phi - model.phi)/2)^model.T)*q*(1 - amid)/(1 - a1)]);
+    
+                        if rand() < alpha
+    
+                            model        = m2;
+    
+%                         else
+%     
+%                             disp('amp rejection')
+
+                        end
+    
+                    end
+    
+                case 3 %perturb dtS
+    
+                    modeln.dtS(change(k)) = randn()*TD_parameters.sig*TD_parameters.max_dtS + model.dtS(change(k));
+    
+                    modeln = evaluate(modeln, allWfs, TD_parameters, t, evt_ind, sta_ind, prelogf);
+                    alpha  = min([1 exp(-(modeln.phi - model.phi)/2)^model.T ]);
+    
+                    r = rand();
+    
+                    if r < alpha && modeln.dtS(change(k)) < TD_parameters.max_dtS && modeln.dtS(change(k)) > 0
+    
+                        model        = modeln;
+    
+                    elseif r >= alpha && modeln.dtS(change(k)) < TD_parameters.max_dtS && modeln.dtS(change(k)) > 0
+    
+                        m1 = modeln;
+                        a1 = alpha;
+    
+                        sig  = TD_parameters.sig*TD_parameters.max_dtS;
+                        sig2 = TD_parameters.sig*TD_parameters.max_dtS/5;
+    
+                        m2                = m1;
+                        m2.dtS(change(k)) = randn()*sig2 + model.dtS(change(k));
+                        m2                = evaluate(m2, allWfs, TD_parameters, t, evt_ind, sta_ind, prelogf);
+    
+                        amid = min([1 exp(-(m1.phi - m2.phi)/2)^model.T ]);
+    
+                        q = exp( -((m2.dtS(change(k)) - m1.dtS(change(k)))^2 - (m1.dtS(change(k)) - model.dtS(change(k)))^2)/(2*sig^2) );
+    
+                        alpha = min([ 1 (exp(-(m2.phi - model.phi)/2)^model.T)*q*(1 - amid)/(1 - a1)]);
+    
+                        if rand() < alpha && abs(m2.dtS(change(k))) < TD_parameters.max_dtS && m2.dtS(change(k)) > 0
+    
+                            model        = m2;
+    
+%                         else
+%     
+%                             disp('dtS rejection')
+
+                        end
+    
+                    end
+    
+                case 4 %change sig
+    
+                    modeln.sig(change(k)) = randn()*TD_parameters.sig*diff(TD_parameters.sig_range) + model.sig(change(k));
+    
+                    modeln = evaluate(modeln, allWfs, TD_parameters, t, evt_ind, sta_ind, prelogf);
+                    alpha  = min([ log(1) (modeln.llh - model.llh)*model.T ]);
+    
+                    r = log(rand());
+    
+                    if r < alpha && modeln.sig(change(k)) < TD_parameters.sig_range(2) && ...
+                            modeln.sig(change(k)) > TD_parameters.sig_range(1)
+    
+                        model        = modeln;
+                    
+                    elseif r > alpha && modeln.sig(change(k)) > TD_parameters.sig_range(2) && ...
+                            modeln.sig(change(k)) < TD_parameters.sig_range(1)
+                        
+                        alpha = exp(alpha);
+
+                        m1 = modeln;
+                        a1 = alpha;
+    
+                        sig  = TD_parameters.sig*diff(TD_parameters.sig_range);
+                        sig2 = TD_parameters.sig*diff(TD_parameters.sig_range)/5;
+    
+                        m2                = m1;
+                        m2.sig(change(k)) = randn()*sig2 + model.sig(change(k));
+                        m2                = evaluate(m2, allWfs, TD_parameters, t, evt_ind, sta_ind, prelogf);
+    
+                        amid = exp(min([ log(1) (m1.llh - m2.llh)*model.T ]));
+    
+                        q = exp( -((m2.sig(change(k)) - m1.sig(change(k)))^2 - (m1.sig(change(k)) - model.sig(change(k)))^2)/(2*sig^2) );
+    
+                        alpha = min([ log(1) (((m2.llh - model.llh)*model.T) + log(q) + log((1 - amid)/(1 - a1))) ]);
+
+                        r = log(rand());
+
+                        if r < alpha && m2.sig(change(k)) < TD_parameters.sig_range(2) && ...
+                            m2.sig(change(k)) > TD_parameters.sig_range(1)
+
+                            model = m2;
+
+%                         else
+% 
+%                             disp('sig rejection')
+
+                        end
+
+                    end
+
+                case 5 %random shift for cycle skipping
+
+                    modeln.shift(change(k)) = rand()*TD_parameters.maxDelay*2 - TD_parameters.maxDelay;
+    
+                    modeln = evaluate(modeln, allWfs, TD_parameters, t, evt_ind, sta_ind, prelogf);
+                    alpha  = min([1 exp(-(modeln.phi - model.phi)/2)^model.T ]);
+    
+                    r = rand();
+    
+                    if r < alpha
+                        
+                        model        = modeln;
+
+                    end
+    
+            end
+
+        end
+
+    end
+
+    %per station
+    for k = 1:nsta
+
+        %get the number of splits
+        nsplits  = length(model.dt(k, :));%currently will only ever be 2
+        splitind = randi(nsplits);
+
+        action = randperm(4);
+
+        for a = 1:length(action)
+
+            modeln = model;
+
+            switch action(a)
+
+                case 1 %splitting time of a layer
+            
+                    modeln.dt(k, splitind) = randn()*TD_parameters.sig*TD_parameters.max_dt + model.dt(k, splitind);
+                
+                    modeln = evaluate(modeln, allWfs, TD_parameters, t, 1:nevt, k, prelogf);
+            
+                    alpha  = min([1 exp(-(modeln.phi - model.phi)/2)^model.T ]);
+            
+                    if rand() < alpha && modeln.dt(k, splitind) > 0 && modeln.dt(k, splitind) < TD_parameters.max_dt
+            
+                        model        = modeln;
+            
+                    else
+            
+                        m1 = modeln;
+                        a1 = alpha;
+    
+                        sig  = TD_parameters.sig*TD_parameters.max_dt;
+                        sig2 = TD_parameters.sig*TD_parameters.max_dt/10;
+    
+                        m2                 = m1;
+                        m2.dt(k, splitind) = randn()*sig2 + model.dt(k, splitind);
+                        m2                 = evaluate(m2, allWfs, TD_parameters, t, 1:nevt, k, prelogf);
+    
+                        amid = min([1 exp(-(m1.phi - m2.phi)/2)^model.T ]);
+    
+                        q = exp( -((m2.dt(k, splitind) - m1.dt(k, splitind))^2 - (m1.dt(k, splitind) - model.dt(k, splitind))^2)/(2*sig^2) );
+    
+                        alpha = min([ 1 (exp(-(m2.phi - model.phi)/2)^model.T)*q*(1 - amid)/(1 - a1)]);
+    
+                        if rand() < alpha && m2.dt(k, splitind) < TD_parameters.max_dt && m2.dt(k, splitind) > 0
+    
+                            model        = m2;
+    
+%                         else
+%     
+%                             disp('dt rejection')
+
+                        end
+
+                    end
+
+                case 2 %mean fast direction in a layer 
+        
+                    modeln.fast_dir(k, splitind) = mod(randn()*TD_parameters.sig*2*pi + model.fast_dir(k, splitind), 2*pi);
+                    modeln.fast_dir(k, splitind) = mod(modeln.fast_dir(k, splitind), 2*pi);%bimodal solutions
+
+                    modeln = evaluate(modeln, allWfs, TD_parameters, t, 1:nevt, k, prelogf);
+            
+                    alpha  = min([1 exp(-(modeln.phi - model.phi)/2)^model.T ]);
+            
+                    if rand() < alpha
+            
+                        model        = modeln;
+            
+                    else
+            
+                        m1 = modeln;
+                        a1 = alpha;
+    
+                        sig  = TD_parameters.sig*2*pi;
+                        sig2 = TD_parameters.sig*2*pi/20;
+    
+                        m2                       = m1;
+                        m2.fast_dir(k, splitind) = randn()*sig2 + model.fast_dir(k, splitind);
+                        m2.fast_dir(k, splitind) = mod(m2.fast_dir(k, splitind), 2*pi);
+                        m2                       = evaluate(m2, allWfs, TD_parameters, t, 1:nevt, k, prelogf);
+    
+                        amid  = min([1 exp(-(m1.phi - m2.phi)/2)^model.T ]);
+                        q     = exp( -( circ_dist(m2.fast_dir(k, splitind), m1.fast_dir(k, splitind))^2 ...
+                            - circ_dist(m1.fast_dir(k, splitind), model.fast_dir(k, splitind))^2)/(2*sig^2) );
+                        alpha = min([ 1 (exp(-(m2.phi - model.phi)/2)^model.T)*q*(1 - amid)/(1 - a1)]);
+    
+                        if rand() < alpha
+    
+                            model        = m2;
+    
+%                         else
+%     
+%                             disp('phi rejection')
+
+                        end
+
+                    end
+
+                case 3 %deviation of the fast direction in a layer 
+        
+                    %perturb, or do a transdimensional step?
+
+                    std     = TD_parameters.rotation_std;%convience
+                    tdornot = randi([ 0 1 ]);
+
+                    if tdornot==1
+
+                        %birth if its zero, death if its not
+                        if modeln.fast_dir_rotation(k, splitind) == 0 %birth 
+
+                            %birth from the prior (simple acceptence
+                            %function)
+        
+                            modeln.fast_dir_rotation(k, splitind) = randn()*std;
+                            modeln = evaluate(modeln, allWfs, TD_parameters, t, 1:nevt, k, prelogf);
+                    
+                            alpha  = min([1 exp( ((model.fast_dir_rotation(k, splitind))^2)/(2*std^2) ...
+                                - ((modeln.fast_dir_rotation(k, splitind))^2)/(2*std^2))*...
+                                exp(-(modeln.phi - model.phi)/2)^model.T ]);
+                    
+                            if rand() < alpha
+                    
+                                model        = modeln;
+                            end
+
+                        else %death
+
+                        end
+
+                    elseif tdornot==0
+
+                        modeln.fast_dir_rotation(k, splitind) = randn()*TD_parameters.sig*std...
+                            + model.fast_dir_rotation(k, splitind);
+    
+                        modeln = evaluate(modeln, allWfs, TD_parameters, t, 1:nevt, k, prelogf);
+                
+                        alpha  = min([1 exp( ((model.fast_dir_rotation(k, splitind))^2)/(2*std^2) ...
+                            - ((modeln.fast_dir_rotation(k, splitind))^2)/(2*std^2))*...
+                            exp(-(modeln.phi - model.phi)/2)^model.T ]);
+                
+                        if rand() < alpha
+                
+                            model        = modeln;
+                
+                        else
+                
+                            m1 = modeln;
+                            a1 = alpha;
+        
+                            sig  = TD_parameters.sig*std;
+                            sig2 = TD_parameters.sig*std/20;
+        
+                            m2                                = m1;
+                            m2.fast_dir_rotation(k, splitind) = randn()*sig2 + model.fast_dir_rotation(k, splitind);
+                            m2                                = evaluate(m2, allWfs, TD_parameters, t, 1:nevt, k, prelogf);
+        
+                            amid  = min([1 exp(-(m1.phi - m2.phi)/2)^model.T ]);
+    
+                            q     = exp( -( (m2.fast_dir_rotation(k, splitind) - m1.fast_dir_rotation(k, splitind))^2 ...
+                                - (m1.fast_dir_rotation(k, splitind) - model.fast_dir_rotation(k, splitind))^2)/(2*sig^2));
+    
+                            alpha = min([ 1 (exp(-(m2.phi - model.phi)/2)^model.T)*q*(1 - amid)/(1 - a1)]);
+        
+                            if rand() < alpha
+        
+                                model        = m2;
+        
+    %                         else
+    %     
+    %                             disp('phi deviation rejection')
+    
+                            end
+    
+                        end
+
+                    end
+
+                case 4
+
+                    kappa   = [allWfs(:, k).orientation_k];
+
+                    if isempty(kappa(~isnan(kappa)))
+                        kappa   = 1/100^2;%just some tiny number. No data.
+                        sta_err = 2*pi;
+                    else
+                        kappa   = unique(kappa(~isnan(kappa)));
+                        sta_err = min([ 2*pi, sqrt(1/kappa)]);
+                    end
+
+                    modeln.sta_or(k) = randn()*TD_parameters.sig*sta_err + model.sta_or(k);
+                    modeln.sta_or(k) = mod(modeln.sta_or(k), 2*pi);
+                    modeln           = evaluate(modeln, allWfs, TD_parameters, t, 1:nevt, k, prelogf);
+            
+                    %prior is differntial for zero mean von mises. kappa
+                    %is constant
+                    alpha  = min([1 (exp(-(modeln.phi - model.phi)/2)^model.T)*exp(kappa*(cos(modeln.sta_or(k)) - cos(model.sta_or(k)))) ]);
+            
+                    if rand() < alpha
+            
+                        model        = modeln;
+            
+                    else
+            
+                        m1 = modeln;
+                        a1 = alpha;
+    
+                        sig  = TD_parameters.sig*sta_err;
+                        sig2 = TD_parameters.sig*sta_err/5;
+    
+                        m2           = m1;
+                        m2.sta_or(k) = mod(randn()*sig2 + model.sta_or(k), 2*pi);
+                        m2           = evaluate(m2, allWfs, TD_parameters, t, 1:nevt, k, prelogf);
+    
+                        amid = min([1 exp(-(m1.phi - m2.phi)/2)^model.T ]);
+    
+                        q = exp( -( circ_dist(m2.sta_or(k), m1.sta_or(k))^2 - circ_dist(m1.sta_or(k), model.sta_or(k))^2)/(2*sig^2) );
+    
+                        alpha = min([ 1 (exp(-(m2.phi - model.phi)/2)^model.T)*exp(kappa*(cos(m2.sta_or(k)) - cos(model.sta_or(k))))*q*(1 - amid)/(1 - a1)]);
+    
+                        if rand() < alpha
+    
+                            model        = m2;
+    
+%                         else
+%     
+%                             disp('ori rejection')
+
+                        end
+
+                    end
+
+            end
+
+        end
+
+    end
+    
+    %global
+    modeln = model;
+
+    modeln.r = randn()*TD_parameters.sig*TD_parameters.r_range(2) + modeln.r;
+    modeln.f = randn()*TD_parameters.sig*TD_parameters.f_range(2) + modeln.f;
+
+    modeln = build_C(modeln, t);
+    modeln = evaluate(modeln, allWfs, TD_parameters, t, 1:nevt, 1:nsta, prelogf);
+    
+    prr = ((model.r - TD_parameters.r_range(1))^2  - ...
+        (modeln.r - TD_parameters.r_range(1))^2)/(2*TD_parameters.r_range(2)^2);
+    prf = ((model.f - TD_parameters.f_range(1))^2  - ...
+        (modeln.f - TD_parameters.f_range(1))^2)/(2*TD_parameters.f_range(2)^2);
+    
+    alpha  = min( [ log(1) (prr + prf + (modeln.llh - model.llh)*model.T ) ] );
+    
+    if log(rand()) < alpha
+    
+        model        = modeln;
+    
+%     else
+% 
+%         disp('cov rejection')
+
+    end
+
+end
+
